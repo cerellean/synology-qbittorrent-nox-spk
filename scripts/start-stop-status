@@ -1,20 +1,28 @@
 #!/bin/bash
-# 强制指定包路径和用户名
+
 PKG_DIR="/var/packages/qBittorrent/target"
-RUN_USER="sc-qBittorrent"  # 如果 privilege 里自定义了，改这里
+RUN_USER="sc-qBittorrent"
+# 把家目录、配置、缓存、数据全部指向套件的 var 目录
+PKG_VAR="${PKG_DIR}/var"
+CONF_DIR="${PKG_VAR}/config"
+CACHE_DIR="${PKG_VAR}/cache"
+DATA_DIR="${PKG_VAR}/data"
 
 case $1 in
     start)
-        # 1. 强制杀一遍旧进程防止冲突
         pkill -f "qbittorrent-nox" 2>/dev/null
-        
-        # 2. 准备配置目录并赋权（核心！）
-        # 群晖的 package 用户可能没有家目录，我们直接把它指向套件本身的临时目录
-        mkdir -p "${PKG_DIR}/var/config"
-        chown -R ${RUN_USER}:${RUN_USER} "${PKG_DIR}/var"
-        
-        # 3. 以后台模式启动，并显式指定配置目录，规避家目录权限问题
-        su -s /bin/bash ${RUN_USER} -c "${PKG_DIR}/bin/qbittorrent-nox -d --webui-port=8085 --profile=${PKG_DIR}/var/config"
+
+        # 创建所有需要的目录
+        mkdir -p "${CONF_DIR}" "${CACHE_DIR}" "${DATA_DIR}"
+        chown -R ${RUN_USER}:${RUN_USER} "${PKG_VAR}"
+
+        # 用 su 注入环境变量启动，确保 qbittorrent 写到正确位置
+        su -s /bin/bash ${RUN_USER} -c "\
+            export HOME='${PKG_VAR}' \
+            XDG_CONFIG_HOME='${CONF_DIR}' \
+            XDG_CACHE_HOME='${CACHE_DIR}' \
+            XDG_DATA_HOME='${DATA_DIR}' \
+            ${PKG_DIR}/bin/qbittorrent-nox -d --webui-port=8085"
         ;;
     stop)
         pkill -f "qbittorrent-nox" 2>/dev/null
