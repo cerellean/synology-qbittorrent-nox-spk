@@ -1,0 +1,38 @@
+[
+  {
+    "step_title": "qBittorrent 基本设置",
+    "items": [
+      {
+        "type": "textfield",
+        "desc": "Web管理界面用户名",
+        "subitems": [
+          {
+            "key": "wizard_username",
+            "desc": "用户名",
+            "validator": {
+              "allowBlank": false
+            }
+          }
+        ]
+      },
+      {
+        "type": "textfield",
+        "desc": "Web管理界面密码",
+        "subitems": [
+          {
+            "key": "wizard_password",
+            "desc": "密码",
+            "validator": {
+              "allowBlank": false,
+              "minLength": 8,
+                "regex": {
+                    "expr": "/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/",
+                    "errorText": "密码不符合当前强度规则。最短密码长度为 8 个字符，并且必须包含大小写、数字字符和特殊字符。"
+                }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

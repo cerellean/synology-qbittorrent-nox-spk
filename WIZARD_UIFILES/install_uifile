@@ -1,0 +1,38 @@
+[
+  {
+    "step_title": "qBittorrent configuration",
+    "items": [
+      {
+        "type": "textfield",
+        "desc": "Web interface username.",
+        "subitems": [
+          {
+            "key": "wizard_username",
+            "desc": "Username",
+            "validator": {
+              "allowBlank": false
+            }
+          }
+        ]
+      },
+      {
+        "type": "textfield",
+        "desc": "Web interface password.",
+        "subitems": [
+          {
+            "key": "wizard_password",
+            "desc": "Password",
+            "validator": {
+              "allowBlank": false,
+              "minLength": 8,
+                "regex": {
+                    "expr": "/^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/",
+                    "errorText": "Password does not meet the current strength rules. The minimum password length is 8 characters and must include mixed case, numeric characters, and special characters."
+                }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
