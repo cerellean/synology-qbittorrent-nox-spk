@@ -1,0 +1,12 @@
+{
+  "port-config": {
+    "protocol": "tcp",
+    "ports": [
+      {
+        "port": "8085",
+        "type": "web",
+        "name": "qBittorrent Web UI"
+      }
+    ]
+  }
+}
