@@ -1,1 +1,47 @@
+name: Build Synology qBittorrent SPK
 
+on:
+  workflow_dispatch: # 允许手动点击按钮触发
+  schedule:
+    - cron: '0 0 * * 0' # 可选：每周日自动检查更新
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download static qbittorrent-nox (x86_64 example)
+        run: |
+          # 这里以 x86_64 为例，如果是 ARM 请换 aarch64 链接
+          wget -O qbittorrent-nox https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/x86_64-qbittorrent-nox
+          chmod +x qbittorrent-nox
+
+      - name: Prepare SPK structure
+        run: |
+          mkdir -p spk_build/package/bin
+          mkdir -p spk_build/scripts
+          # 将二进制放入包内
+          cp qbittorrent-nox spk_build/package/bin/
+          # 复制你之前写好的 INFO 和脚本
+          cp INFO spk_build/package/
+          cp scripts/start-stop-status spk_build/scripts/
+          chmod +x spk_build/scripts/start-stop-status
+
+      - name: Pack SPK
+        run: |
+          cd spk_build/package
+          # 群晖 SPK 本质上是 tar 包，通常包含 package.tgz 和 INFO
+          tar -czf ../package.tgz *
+          cd ..
+          # 将 package.tgz 和 INFO 打包成 .spk
+          tar -cf qbittorrent.spk package.tgz INFO scripts/
+          # 修正权限（可选，但推荐）
+          chmod 755 qbittorrent.spk
+
+      - name: Upload SPK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbittorrent-spk
+          path: spk_build/qbittorrent.spk
