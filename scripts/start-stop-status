@@ -1,0 +1,16 @@
+#!/bin/bash
+case $1 in
+    start)
+        # 假设二进制文件被打包在 target/bin/ 下
+        /var/packages/qBittorrent/target/bin/qbittorrent-nox -d --webui-port=8085 &
+        exit 0
+        ;;
+    stop)
+        pkill qbittorrent-nox
+        exit 0
+        ;;
+    status)
+        pgrep qbittorrent-nox > /dev/null
+        exit $?
+        ;;
+esac
