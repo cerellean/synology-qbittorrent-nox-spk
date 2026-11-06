@@ -59,6 +59,8 @@ jobs:
           tar -czf ../package.tgz *
           cd ..
           cp package/INFO .
+          mkdir -p conf
+          cp ../conf/privilege conf/privilege
           tar -cf qbittorrent.spk package.tgz INFO scripts/
           chmod 755 qbittorrent.spk
 
