@@ -1,35 +1,33 @@
 #!/bin/bash
 
 PKG_DIR="/var/packages/qBittorrent/target"
-# 改成大写的 qBittorrent
 RUN_USER="qBittorrent" 
-
 PKG_VAR="${PKG_DIR}/var"
-CONF_DIR="${PKG_VAR}/config"
-CACHE_DIR="${PKG_VAR}/cache"
-DATA_DIR="${PKG_VAR}/data"
 
 case $1 in
     start)
-        pkill -f "qbittorrent-nox" 2>/dev/null
+        # 清理旧进程
+        pkill -u ${RUN_USER} -f "qbittorrent-nox" 2>/dev/null
         sleep 1
 
-        mkdir -p "${CONF_DIR}" "${CACHE_DIR}" "${DATA_DIR}"
-        # 赋权给 qBittorrent 用户
+        # 创建目录并赋权
+        mkdir -p "${PKG_VAR}/config" "${PKG_VAR}/cache" "${PKG_VAR}/data"
         chown -R ${RUN_USER}:${RUN_USER} "${PKG_VAR}"
 
+        # 注意这里：去掉了 -d 参数，改用 & 放到后台运行
+        # 并且加了 > /dev/null 2>&1 防止输出卡住群晖的管道
         su -s /bin/bash ${RUN_USER} -c "\
             export HOME='${PKG_VAR}' \
-            XDG_CONFIG_HOME='${CONF_DIR}' \
-            XDG_CACHE_HOME='${CACHE_DIR}' \
-            XDG_DATA_HOME='${DATA_DIR}' \
-            ${PKG_DIR}/bin/qbittorrent-nox -d --webui-port=8085"
+            XDG_CONFIG_HOME='${PKG_VAR}/config' \
+            XDG_CACHE_HOME='${PKG_VAR}/cache' \
+            XDG_DATA_HOME='${PKG_VAR}/data' \
+            ${PKG_DIR}/bin/qbittorrent-nox --webui-port=8085 > /dev/null 2>&1 &"
         ;;
     stop)
-        pkill -f "qbittorrent-nox" 2>/dev/null
+        pkill -u ${RUN_USER} -f "qbittorrent-nox" 2>/dev/null
         ;;
     status)
-        pgrep -f "qbittorrent-nox" > /dev/null
+        pgrep -u ${RUN_USER} -f "qbittorrent-nox" > /dev/null
         exit $?
         ;;
 esac
