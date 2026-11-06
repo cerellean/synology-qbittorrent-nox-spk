@@ -36,3 +36,22 @@
 - **手动触发**：进入仓库 **Actions** 页 → 选择 `Build Synology qBittorrent SPK` → 点击 **Run workflow**。
 
 ## 仓库结构
+.
+├── .github/workflows/build.yml # GitHub Actions 工作流
+├── INFO # 套件元数据（版本号、架构由工作流动态写入）
+├── scripts/
+│ └── start-stop-status # 套件启动/停止脚本
+└── README.md
+
+
+## 自定义说明
+
+- **只构建单一架构**：编辑 `build.yml` 中 `strategy.matrix.include`，删掉不需要的架构项。
+- **修改定时频率**：编辑 `build.yml` 中 `schedule` 的 cron 表达式。
+- **调整最低 DSM 版本**：修改 `INFO` 中的 `os_min_ver` 字段。
+
+## 免责声明
+
+- 本项目仅做自动化打包，qBittorrent 二进制文件来自 [userdocs/qbittorrent-nox-static](https://github.com/userdocs/qbittorrent-nox-static)，套件打包逻辑为个人维护，与群晖官方及 qBittorrent 官方无关。
+- 使用第三方套件存在一定风险，请自行评估。建议安装前备份重要数据。
+- 本项目不提供任何形式的担保，使用后果自负。
