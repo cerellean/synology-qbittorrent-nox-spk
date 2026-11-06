@@ -1,4 +1,4 @@
-# Synology qBittorrent SPK（自动构建）
+# Synology qBittorrent-nox SPK（自动构建）
 
 自动从上游拉取最新版 qBittorrent 静态二进制文件，打包成群晖（Synology）DSM 7 可安装的 `.spk` 套件，并自动发布到 Releases。
 
