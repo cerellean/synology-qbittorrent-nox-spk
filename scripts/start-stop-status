@@ -1,16 +1,27 @@
+#!/bin/bash
+# 强制指定包路径和用户名
+PKG_DIR="/var/packages/qBittorrent/target"
+RUN_USER="sc-qBittorrent"  # 如果 privilege 里自定义了，改这里
+
 case $1 in
     start)
-        USER="sc-qBittorrent"  # 替换成你的实际运行用户
-        CONFIG_DIR="/var/services/homes/${USER}/.config/qBittorrent"
-        mkdir -p "${CONFIG_DIR}"
-        chown -R "${USER}:${USER}" "/var/services/homes/${USER}/.config" 2>/dev/null
-        su -s /bin/sh -c "/var/packages/qBittorrent/target/bin/qbittorrent-nox -d" "${USER}"
+        # 1. 强制杀一遍旧进程防止冲突
+        pkill -f "qbittorrent-nox" 2>/dev/null
+        
+        # 2. 准备配置目录并赋权（核心！）
+        # 群晖的 package 用户可能没有家目录，我们直接把它指向套件本身的临时目录
+        mkdir -p "${PKG_DIR}/var/config"
+        chown -R ${RUN_USER}:${RUN_USER} "${PKG_DIR}/var"
+        
+        # 3. 以后台模式启动，并显式指定配置目录，规避家目录权限问题
+        su -s /bin/bash ${RUN_USER} -c "${PKG_DIR}/bin/qbittorrent-nox -d --webui-port=8085 --profile=${PKG_DIR}/var/config"
         ;;
     stop)
-        pkill -u sc-qBittorrent qbittorrent-nox 2>/dev/null
+        pkill -f "qbittorrent-nox" 2>/dev/null
         ;;
     status)
-        pgrep -u sc-qBittorrent qbittorrent-nox > /dev/null
+        pgrep -f "qbittorrent-nox" > /dev/null
         exit $?
         ;;
 esac
+exit 0
