@@ -59,10 +59,12 @@ jobs:
           tar -czf ../package.tgz *
           cd ..
           cp package/INFO .
+          ls -la ../conf/privilege  # 调试用，确认源文件存在
           mkdir -p conf
           cp ../conf/privilege conf/privilege
-          tar -cf qbittorrent.spk package.tgz INFO scripts/
+          tar -cf qbittorrent.spk package.tgz INFO scripts/ conf/
           chmod 755 qbittorrent.spk
+          tar -tf qbittorrent.spk | grep privilege
 
       - name: Rename SPK with arch and version
         run: |
