@@ -1,8 +1,8 @@
 #!/bin/bash
 
 PKG_DIR="/var/packages/qBittorrent/target"
-# 使用系统创建的那个用户
-RUN_USER="sc-qBittorrent" 
+# 改成大写的 qBittorrent
+RUN_USER="qBittorrent" 
 
 PKG_VAR="${PKG_DIR}/var"
 CONF_DIR="${PKG_VAR}/config"
@@ -11,19 +11,13 @@ DATA_DIR="${PKG_VAR}/data"
 
 case $1 in
     start)
-        # 1. 清理可能残留的进程
         pkill -f "qbittorrent-nox" 2>/dev/null
         sleep 1
 
-        # 2. 创建必要的目录
         mkdir -p "${CONF_DIR}" "${CACHE_DIR}" "${DATA_DIR}"
-        
-        # 3. 核心：强制把整个 var 目录的所有权赋予 sc-qBittorrent
-        # 这一步解决了之前因为权限不足导致秒退的问题
+        # 赋权给 qBittorrent 用户
         chown -R ${RUN_USER}:${RUN_USER} "${PKG_VAR}"
 
-        # 4. 执行启动命令
-        # 注意：不使用 sudo，直接使用 su -s 来切换用户并注入环境变量
         su -s /bin/bash ${RUN_USER} -c "\
             export HOME='${PKG_VAR}' \
             XDG_CONFIG_HOME='${CONF_DIR}' \
