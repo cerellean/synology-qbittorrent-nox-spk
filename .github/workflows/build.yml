@@ -1,30 +1,54 @@
 name: Build Synology qBittorrent SPK
 
 on:
-  workflow_dispatch: # 允许手动点击按钮触发
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0' # 可选：每周日自动检查更新
+    - cron: '0 0 * * 0'  # 每周日 00:00 UTC 自动运行
+
+permissions:
+  contents: write  # 发布 Release 需要写权限
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            file_suffix: x86_64
+          - arch: aarch64
+            file_suffix: aarch64
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download static qbittorrent-nox (x86_64 example)
+      - name: Get latest version from upstream
+        id: get_version
         run: |
-          # 这里以 x86_64 为例，如果是 ARM 请换 aarch64 链接
-          wget -O qbittorrent-nox https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/x86_64-qbittorrent-nox
+          LATEST_VER=$(curl -sL https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/dependency-version.json | jq -r '.qbittorrent')
+          echo "qbt_version=${LATEST_VER}" >> $GITHUB_OUTPUT
+          echo "检测到上游版本: $LATEST_VER"
+
+      - name: Download static qbittorrent-nox
+        run: |
+          wget -O qbittorrent-nox \
+            "https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/${{ matrix.file_suffix }}-qbittorrent-nox"
           chmod +x qbittorrent-nox
+
+      - name: Update INFO with auto-incremented version
+        run: |
+          FULL_VERSION="${{ steps.get_version.outputs.qbt_version }}-${{ github.run_number }}"
+          echo "本次套件版本: $FULL_VERSION"
+          sed -i "s/^version=\".*\"/version=\"${FULL_VERSION}\"/" INFO
+          # 确保 INFO 中的 arch 与当前构建架构一致
+          sed -i "s/^arch=\".*\"/arch=\"${{ matrix.arch }}\"/" INFO
+          cat INFO
 
       - name: Prepare SPK structure
         run: |
           mkdir -p spk_build/package/bin
           mkdir -p spk_build/scripts
-          # 将二进制放入包内
           cp qbittorrent-nox spk_build/package/bin/
-          # 复制你之前写好的 INFO 和脚本
           cp INFO spk_build/package/
           cp scripts/start-stop-status spk_build/scripts/
           chmod +x spk_build/scripts/start-stop-status
@@ -32,18 +56,45 @@ jobs:
       - name: Pack SPK
         run: |
           cd spk_build/package
-          # 群晖 SPK 本质上是 tar 包，通常包含 package.tgz 和 INFO
           tar -czf ../package.tgz *
           cd ..
-          # 把 INFO 复制到当前目录，供最终 tar 使用
           cp package/INFO .
-          # 将 package.tgz 和 INFO 打包成 .spk
           tar -cf qbittorrent.spk package.tgz INFO scripts/
-          # 修正权限（可选，但推荐）
           chmod 755 qbittorrent.spk
 
-      - name: Upload SPK artifact
+      - name: Rename SPK with arch and version
+        run: |
+          VERSION="${{ steps.get_version.outputs.qbt_version }}-${{ github.run_number }}"
+          NEW_NAME="qBittorrent-${{ matrix.arch }}-${VERSION}.spk"
+          mv spk_build/qbittorrent.spk "spk_build/${NEW_NAME}"
+          echo "生成文件: ${NEW_NAME}"
+          ls -la spk_build/*.spk
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qbittorrent-spk
-          path: spk_build/qbittorrent.spk
+          name: qbittorrent-spk-${{ matrix.arch }}
+          path: spk_build/*.spk
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: qBittorrent Build ${{ github.run_number }}
+          body: |
+            自动构建的群晖 qBittorrent 套件。
+            - 上游 qBittorrent 版本: ${{ needs.build.outputs.qbt_version }}
+            - 构建编号: ${{ github.run_number }}
+            - 支持架构: x86_64, aarch64
+          files: artifacts/**/*.spk
+          draft: false
+          prerelease: false
