@@ -1,0 +1,248 @@
+#!/bin/sh
+
+# qBittorrent 保活与资源监控脚本
+# 功能：自动选择Python环境、同步WebUI配置、崩溃防护、日志轮转等
+# 作者：矿神SPK7
+# 版本：20260506
+
+# ------------------------------------------------------------------------------
+# 配置初始化
+# ------------------------------------------------------------------------------
+
+GETKEYVALUE="/usr/syno/bin/synogetkeyvalue"
+LOG_FILE="${SYNOPKG_PKGVAR}/${SYNOPKG_PKGNAME}.log"
+CRASH_COUNTER_FILE="${SYNOPKG_PKGVAR}/crash_counter.txt"
+QBIT_CONF="${SYNOPKG_PKGVAR}/qBittorrent_conf/config/qBittorrent.conf"
+
+# ------------------------------------------------------------------------------
+# 日志函数
+# ------------------------------------------------------------------------------
+
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> "${LOG_FILE}"
+}
+
+# ------------------------------------------------------------------------------
+# Python环境选择
+# ------------------------------------------------------------------------------
+
+setup_python_env() {
+    local dirs=(
+        "/var/packages/python313"
+        "/var/packages/python312" 
+        "/var/packages/python311"
+        "/var/packages/python310"
+    )
+
+    for dir in "${dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            export PATH="${dir}/target/bin:$PATH"
+            log_message "使用 Python 套件路径: $dir"
+            return 0
+        fi
+    done
+    
+    log_message "警告：未检测到 Python310~313 套件"
+    return 1
+}
+
+setup_python_env
+
+# ------------------------------------------------------------------------------
+# WebUI配置同步
+# ------------------------------------------------------------------------------
+
+sync_webui_config() {
+    # 获取当前配置
+    PORT=$(${GETKEYVALUE} "${QBIT_CONF}" "WebUI\\Port" 2>/dev/null || echo "8085")
+    PROT=$(${GETKEYVALUE} "${QBIT_CONF}" "WebUI\\HTTPS\\Enabled" 2>/dev/null || echo "false")
+    
+    UIPROT=$(cat "${SYNOPKG_PKGDEST}/ui/config" 2>/dev/null | jq -r '.".url"."SYNO.SDS.'${SYNOPKG_PKGNAME}'.Application"."protocol"' 2>/dev/null || echo "http")
+    UIPORT=$(cat "${SYNOPKG_PKGDEST}/ui/config" 2>/dev/null | jq -r '.".url"."SYNO.SDS.'${SYNOPKG_PKGNAME}'.Application"."port"' 2>/dev/null || echo "8085")
+
+    # 设置默认密码（如果需要）
+    DEFAULT_PASSWORD='@ByteArray(xK2EwRvfGtxfF+Ot9v4WYQ==:bNStY\/6mFYYW8m\/Xm4xSbBjoR2tZNsLZ4KvdUzyCLEOg7tfpchVJucIK9Dwcp6Xe9DI4RwpoCPI9zhicTdtf5A==)'
+    PASSWORD_VALUE=$(${GETKEYVALUE} "${QBIT_CONF}" "WebUI\\Password_PBKDF2" 2>/dev/null)
+
+    if [ -z "${PASSWORD_VALUE}" ]; then
+        sed -i '/^WebUI\\Password_PBKDF2/d' "${QBIT_CONF}" 2>/dev/null
+        sed -i '/^WebUI\\Port/i WebUI\\Password_PBKDF2=\"'"${DEFAULT_PASSWORD}"'\"' "${QBIT_CONF}" 2>/dev/null
+        log_message "修复旧版配置，添加默认密码: adminadmin"
+    fi
+
+    # 确定协议
+    PROTOCOL="http"
+    [ "${PROT}" = "true" ] && PROTOCOL="https"
+
+    # 更新UI配置（如果需要）
+    if [ "${PROTOCOL}" != "${UIPROT}" ]; then
+        sed -i "s/\"protocol\":[^,]*/\"protocol\": \"${PROTOCOL}\"/g" "${SYNOPKG_PKGDEST}/ui/config" 2>/dev/null
+        log_message "同步协议: ${UIPROT} → ${PROTOCOL}"
+    fi
+
+    if [ "${PORT}" != "${UIPORT}" ]; then
+        sed -i "s/\"port\":[^,]*/\"port\": \"${PORT}\"/g" "${SYNOPKG_PKGDEST}/ui/config" 2>/dev/null
+        log_message "同步端口: ${UIPORT} → ${PORT}"
+    fi
+}
+
+sync_webui_config
+
+# ------------------------------------------------------------------------------
+# 崩溃计数管理
+# ------------------------------------------------------------------------------
+
+MAX_CRASHES=5
+CRASH_WINDOW=3600
+
+read_crash_count() {
+    if [ -f "$CRASH_COUNTER_FILE" ]; then
+        cat "$CRASH_COUNTER_FILE" 2>/dev/null || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+write_crash_count() {
+    echo "$1" > "$CRASH_COUNTER_FILE"
+}
+
+reset_crash_count() {
+    write_crash_count "0"
+    rm -f "${CRASH_COUNTER_FILE}.timestamp" 2>/dev/null
+    log_message "崩溃计数器已重置"
+}
+
+CRASH_COUNT=$(read_crash_count)
+
+if [ -f "${CRASH_COUNTER_FILE}.timestamp" ]; then
+    LAST_CRASH_TIME=$(cat "${CRASH_COUNTER_FILE}.timestamp")
+    CURRENT_TIME=$(date +%s)
+    if [ $((CURRENT_TIME - LAST_CRASH_TIME)) -gt ${CRASH_WINDOW} ]; then
+        reset_crash_count
+        CRASH_COUNT=0
+    fi
+fi
+
+if [ "$CRASH_COUNT" -ge "$MAX_CRASHES" ]; then
+    log_message "连续崩溃已达 ${MAX_CRASHES} 次，停止重启"
+    exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 信号处理
+# ------------------------------------------------------------------------------
+
+stop_services() {
+    log_message "接收到终止信号，停止服务..."
+    reset_crash_count
+
+    if [ -n "$QB_PID" ] && kill -0 "$QB_PID" 2>/dev/null; then
+        kill -TERM "$QB_PID"
+        log_message "发送 SIGTERM 给 qBittorrent (PID: $QB_PID)"
+
+        TIMEOUT=30
+        END_TIME=$(($(date +%s) + TIMEOUT))
+        while [ $(date +%s) -lt $END_TIME ]; do
+            if ! kill -0 "$QB_PID" 2>/dev/null; then
+                log_message "qBittorrent 已优雅退出"
+                break
+            fi
+            sleep 1
+        done
+
+        if kill -0 "$QB_PID" 2>/dev/null; then
+            kill -9 "$QB_PID"
+            log_message "进程未响应，已强制终止"
+        fi
+    fi
+
+    exit 0
+}
+
+trap stop_services SIGTERM SIGINT
+
+# ------------------------------------------------------------------------------
+# 日志轮转
+# ------------------------------------------------------------------------------
+
+rotate_logs() {
+    local MAX_LOG_SIZE=10485760  # 10MB
+    
+    if [ -f "$LOG_FILE" ]; then
+        LOG_SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+        if [ "$LOG_SIZE" -gt "$MAX_LOG_SIZE" ]; then
+            mv "$LOG_FILE" "$LOG_FILE.old"
+            log_message "日志文件已轮转"
+        fi
+    fi
+}
+
+rotate_logs
+
+# ------------------------------------------------------------------------------
+# 启动主进程
+# ------------------------------------------------------------------------------
+
+log_message "========= qBittorrent 保活脚本启动 ========="
+log_message "崩溃计数: ${CRASH_COUNT}/${MAX_CRASHES}"
+log_message "WebUI 设置 - 端口: ${PORT}, 协议: ${PROTOCOL}"
+log_message "启动 qBittorrent 服务..."
+
+# 删除可能残留的锁文件
+LOCKFILE="${SYNOPKG_PKGVAR}/qBittorrent_conf/config/lockfile"
+if [ -f "$LOCKFILE" ]; then
+    rm -f "$LOCKFILE"
+    log_message "已删除残留的锁文件: $LOCKFILE"
+fi
+
+# 启动 qBittorrent
+"${SYNOPKG_PKGDEST}/bin/qbittorrent-nox" \
+    --profile="${SYNOPKG_PKGVAR}" \
+    --configuration="conf" \
+    --webui-port="${PORT}" >> "${LOG_FILE}" 2>&1 &
+
+QB_PID=$!
+log_message "qBittorrent 已启动，PID: ${QB_PID}"
+
+# 等待主进程退出
+wait "$QB_PID"
+EXIT_CODE=$?
+
+case $EXIT_CODE in
+    0)
+        log_message "正常退出"
+        reset_crash_count
+        exit 0
+        ;;
+    137)
+        log_message "被信号终止"
+        ;;
+    139)
+        log_message "内存访问错误崩溃"
+        ;;
+    *)
+        log_message "非正常退出，退出码: $EXIT_CODE"
+        ;;
+esac
+
+# ------------------------------------------------------------------------------
+# 崩溃处理与重启
+# ------------------------------------------------------------------------------
+
+CRASH_COUNT=$((CRASH_COUNT + 1))
+write_crash_count "$CRASH_COUNT"
+echo "$(date +%s)" > "${CRASH_COUNTER_FILE}.timestamp"
+log_message "崩溃计数更新: ${CRASH_COUNT}/${MAX_CRASHES}"
+
+if [ "$CRASH_COUNT" -ge "$MAX_CRASHES" ]; then
+    log_message "连续崩溃已达 ${MAX_CRASHES} 次，停止重启"
+    rm -f "${CRASH_COUNTER_FILE}" "${CRASH_COUNTER_FILE}.timestamp" 2>/dev/null
+    exit 1
+fi
+
+RETRY_DELAY=10
+log_message "${RETRY_DELAY} 秒后重启..."
+sleep $RETRY_DELAY
+
+exec "$0"
