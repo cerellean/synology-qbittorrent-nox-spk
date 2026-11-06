@@ -1,5 +1,7 @@
 {
   "defaults": {
-    "run-as": "package"
+    "run-as": "package",
+    "username": "qBittorrent",
+    "groupname": "qBittorrent"
   }
 }
