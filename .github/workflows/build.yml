@@ -1,9 +1,9 @@
 name: Build Synology qBittorrent SPK
 
 on:
-  workflow_dispatch: # 手动触发
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0' # 每周日自动运行，检查上游是否有新版
+    - cron: '0 0 * * 0' # 每周日 00:00 UTC 自动检查更新
 
 permissions:
   contents: write
@@ -30,18 +30,23 @@ jobs:
 
       - name: Prepare SPK Structure
         run: |
-          # 1. 创建组装目录
+          # 1. 创建打包临时目录
           mkdir -p target_build/bin
           
-          # 2. 自动下载最新的程序本体
-          echo "正在下载 qBittorrent ${{ steps.get_version.outputs.qbt_version }} (${{ matrix.arch }})..."
+          # 2. 下载最新版官方程序并赋权
+          echo "Downloading qBittorrent ${{ steps.get_version.outputs.qbt_version }} for ${{ matrix.arch }}..."
           wget -O target_build/bin/qbittorrent-nox "https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/${{ matrix.file_suffix }}-qbittorrent-nox"
           chmod +x target_build/bin/qbittorrent-nox
           
-          # 3. 把你上传的 ui 文件夹复制进去
+          # 3. 把你上传的 qbmonitor 复制进 bin 目录并赋权
+          echo "Copying qbmonitor..."
+          cp bin/qbmonitor target_build/bin/qbmonitor
+          chmod +x target_build/bin/qbmonitor
+          
+          # 4. 复制 UI 资源文件夹
           cp -r ui target_build/
           
-          # 4. 组装生成 package.tgz
+          # 5. 将组装好的内容打包成群晖需要的 package.tgz
           cd target_build
           tar -czf ../package.tgz *
           cd ..
@@ -49,15 +54,18 @@ jobs:
       - name: Update INFO
         run: |
           FULL_VERSION="${{ steps.get_version.outputs.qbt_version }}-${{ github.run_number }}"
+          echo "Updating INFO to version: ${FULL_VERSION}"
           sed -i "s/^version=\".*\"/version=\"${FULL_VERSION}\"/" INFO
           sed -i "s/^arch=\".*\"/arch=\"${{ matrix.arch }}\"/" INFO
-          
+          cat INFO
+
       - name: Pack SPK
         run: |
-          # 把生成的最新 package.tgz 和所有配置一起打包装箱
+          # 将生成的 package.tgz 和所有配置文件打包成最终的 .spk
           tar -cf qbittorrent.spk package.tgz INFO scripts/ conf/ WIZARD_UIFILES/
           chmod 755 qbittorrent.spk
           
+          # 重命名为带版本号和架构的文件名
           NEW_NAME="qBittorrent-${{ matrix.arch }}-${{ steps.get_version.outputs.qbt_version }}-${{ github.run_number }}.spk"
           mv qbittorrent.spk "${NEW_NAME}"
           ls -la *.spk
