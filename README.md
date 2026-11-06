@@ -36,13 +36,14 @@
 - **手动触发**：进入仓库 **Actions** 页 → 选择 `Build Synology qBittorrent SPK` → 点击 **Run workflow**。
 
 ## 仓库结构
+```text
 .
-├── .github/workflows/build.yml # GitHub Actions 工作流
-├── INFO # 套件元数据（版本号、架构由工作流动态写入）
+├── .github/workflows/build.yml   # GitHub Actions 工作流
+├── INFO                          # 套件元数据（版本号、架构由工作流动态写入）
 ├── scripts/
-│ └── start-stop-status # 套件启动/停止脚本
+│   └── start-stop-status         # 套件启动/停止脚本
 └── README.md
-
+```
 
 ## 自定义说明
 
