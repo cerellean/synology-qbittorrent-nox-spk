@@ -35,6 +35,8 @@ jobs:
           # 群晖 SPK 本质上是 tar 包，通常包含 package.tgz 和 INFO
           tar -czf ../package.tgz *
           cd ..
+          # 把 INFO 复制到当前目录，供最终 tar 使用
+          cp package/INFO .
           # 将 package.tgz 和 INFO 打包成 .spk
           tar -cf qbittorrent.spk package.tgz INFO scripts/
           # 修正权限（可选，但推荐）
