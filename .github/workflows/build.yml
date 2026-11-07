@@ -30,23 +30,22 @@ jobs:
 
       - name: Prepare SPK Structure
         run: |
-          # 1. 创建打包临时目录
           mkdir -p target_build/bin
+          mkdir -p target_build/var/qBittorrent_conf/config   # 核心：创建配置目录
           
-          # 2. 下载最新版官方程序并赋权
-          echo "Downloading qBittorrent ${{ steps.get_version.outputs.qbt_version }} for ${{ matrix.arch }}..."
+          # 1. 下载主程序
           wget -O target_build/bin/qbittorrent-nox "https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/${{ matrix.file_suffix }}-qbittorrent-nox"
           chmod +x target_build/bin/qbittorrent-nox
           
-          # 3. 把你上传的 qbmonitor 复制进 bin 目录并赋权
-          echo "Copying qbmonitor..."
+          # 2. 复制矿神守护脚本和 UI
           cp bin/qbmonitor target_build/bin/qbmonitor
           chmod +x target_build/bin/qbmonitor
-          
-          # 4. 复制 UI 资源文件夹
           cp -r ui target_build/
           
-          # 5. 将组装好的内容打包成群晖需要的 package.tgz
+          # 3. 将准备好的配置文件放进包内
+          cp defaults/qBittorrent.conf target_build/var/qBittorrent_conf/config/
+          
+          # 4. 打包 package.tgz
           cd target_build
           tar -czf ../package.tgz *
           cd ..
