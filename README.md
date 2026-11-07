@@ -1,48 +1,55 @@
-# Synology qBittorrent-nox SPK（自动构建）
+# Synology qBittorrent SPK (Auto Build)
 
-自动从上游拉取最新版 qBittorrent 静态二进制文件，打包成群晖（Synology）DSM 7 可安装的 `.spk` 套件，并自动发布到 Releases。
+本项目提供了一个基于 GitHub Actions 的全自动构建方案，用于为群晖（Synology）DSM 7 打包最新版的 qBittorrent 套件（`.spk`）。
 
-## 特性
+**核心说明：** 本项目的所有群晖适配配置（包括安装向导、权限控制、WebUI 资源、保活脚本及默认配置文件等）均**提取自“矿神”（矿神SPK7）最终编译发布的版本**。在此基础上，自动化流水线会拉取上游最新版 `qbittorrent-nox` 静态二进制文件进行重新组合，真正做到**界面完美、后台稳定、一键更新**。
 
-- **自动跟随上游版本**：每次运行从 `userdocs/qbittorrent-nox-static` 获取最新 qBittorrent 版本号，无需手动改版本。
-- **版本号自动递增**：套件版本格式为 `{上游版本}-{构建编号}`（如 `5.3.0-42`），每次构建编号自动加一。
-- **多架构支持**：同时构建 `x86_64` 与 `aarch64` 两个架构的套件。
-- **文件名带架构和版本**：产物命名为 `qBittorrent-{架构}-{版本}-{构建编号}.spk`，下载时一目了然。
-- **自动发布 Release**：构建完成后自动创建 GitHub Release 并上传所有 `.spk` 文件。
+## ✨ 特性
 
-## 直接下载使用
+- **原汁原味的群晖体验**：完美复刻了原版套件的安装向导（Wizard），安装时即可设置 WebUI 账号和密码。
+- **全自动构建**：每周日自动触发（或手动触发），自动检查上游最新版本并打包。
+- **免配置端口**：内置优化后的 `qBittorrent.conf` 配置文件，默认 WebUI 端口为 **8085**，安装即用，无需 SSH 进入后台手动修改。
+- **稳定保活**：集成 `qbmonitor` 守护进程，自动修复配置、监控进程状态，异常退出自动重启。
+- **多架构支持**：自动同时构建 `x86_64`（Intel/AMD）与 `aarch64`（ARMv8）两个版本。
+- **版本自动递增**：套件版本格式为 `{上游最新版}-{构建编号}`（如 `5.3.0-14`），每次构建自动递增。
 
-1. 打开本仓库的 [Releases](https://github.com/cerellean/synology-qbittorrent-spk/releases) 页面。
-2. 根据你的群晖 CPU 架构选择对应文件：
-   - Intel / AMD 机型（如 DS920+、DS1621+）→ 下载 `x86_64` 版本
-   - ARMv8 机型（如 DS223、DS1522+）→ 下载 `aarch64` 版本
-3. 在群晖 **套件中心 → 手动安装**，选择下载的 `.spk` 文件安装。
+## 🚀 直接下载使用
 
-> 安装前请确认 DSM 版本为 **7.0 及以上**。第三方套件安装时群晖会提示来源未知，属正常现象。
+1. 前往本仓库的 [Releases](../../releases) 页面。
+2. 根据你的群晖 CPU 架构下载对应的 `.spk` 文件：
+   - **Intel / AMD 机型**（如 DS920+, DS1621+）→ 下载 `x86_64` 版本
+   - **ARMv8 机型**（如 DS223, DS1522+）→ 下载 `aarch64` 版本
+3. 打开群晖 **套件中心 → 手动安装**，选择下载的 `.spk` 文件。
+4. 按照向导提示，设置你的 qBittorrent WebUI 账号和密码。
+5. 安装完成后，在浏览器访问：`http://你的群晖IP:8085`。
 
-## 版本号规则
+> 安装前请确保你的群晖系统为 **DSM 7.0 及以上**。第三方套件安装时群晖会提示来源未知，选择“是”继续安装即可。
 
-| 部分 | 来源 | 示例 |
-|------|------|------|
-| 上游版本 | 上游 `dependency-version.json` 的 `qbittorrent` 字段 | `5.3.0` |
-| 构建编号 | GitHub Actions 的 `run_number`，每次运行自动 +1 | `42` |
-| 完整版本 | `{上游版本}-{构建编号}` | `5.3.0-42` |
+## 🛠️ 构建原理与仓库结构
 
-上游发布新版本后，下一次定时或手动触发的工作流会自动拉取新版本号并重新打包，无需手动修改任何文件。
+本仓库通过 GitHub Actions 自动完成以下工作：
+1. 获取上游 qBittorrent 的最新版本号，并更新 `INFO` 文件。
+2. 下载对应架构的纯静态二进制文件 `qbittorrent-nox`。
+3. 将最新二进制文件、提取的 `qbmonitor` 守护脚本以及 `ui` 资源目录合并打包成 `package.tgz`。
+4. 将 `defaults/qBittorrent.conf` 注入到 `package.tgz` 内的正确路径中，确保首次启动不报错。
+5. 将程序包与群晖控制文件（`INFO`、`scripts/`、`conf/`、`WIZARD_UIFILES/`）打包成最终的 `.spk` 并发布。
 
-## 自动构建触发方式
+**仓库核心结构：**
 
-- **定时触发**：每周日 00:00 UTC 自动运行一次。
-- **手动触发**：进入仓库 **Actions** 页 → 选择 `Build Synology qBittorrent SPK` → 点击 **Run workflow**。
-
-## 仓库结构
 ```text
 .
-├── .github/workflows/build.yml   # GitHub Actions 工作流
-├── INFO                          # 套件元数据（版本号、架构由工作流动态写入）
-├── LICENSE                       # MIT 许可证
+├── .github/workflows/build.yml   # GitHub Actions 自动构建流
+├── bin/
+│   └── qbmonitor                 # 守护与保活脚本（提取自矿神SPK）
+├── conf/                         # 群晖权限与端口配置文件（提取自矿神SPK）
+├── defaults/
+│   └── qBittorrent.conf          # 预置的默认配置文件，包含端口 8085（提取自矿神SPK）
 ├── scripts/
-│   └── start-stop-status         # 套件启动/停止脚本
+│   ├── service-setup             # 启动/安装环境变量定义（提取自矿神SPK）
+│   └── start-stop-status         # 套件启停控制脚本（提取自矿神SPK）
+├── ui/                           # WebUI 静态资源文件夹（提取自矿神SPK）
+├── WIZARD_UIFILES/               # 安装向导配置文件（提取自矿神SPK）
+├── INFO                          # 套件元数据
 └── README.md
 ```
 
